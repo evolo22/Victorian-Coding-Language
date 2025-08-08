@@ -1,0 +1,5 @@
+Inscribe("Hello World")
+
+Madame susan = "Susan"
+
+Inscribe("Hello {susan}")
