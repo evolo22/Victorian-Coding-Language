@@ -1,0 +1,24 @@
+Do fibonacci(n) {
+    Madame a = 0
+    Madame b = 1
+    Madame count = 0
+
+    Whilst (count of lesser magnitude than n) persists {
+        Inscribe(a)
+
+        Madame next = a + b
+        a = b
+        b = next
+
+        count = count + 1
+    }
+
+    Hasten back a
+}
+
+Do commence() {
+    Madame limit = 10
+    fibonacci(limit)
+}
+
+Designated principle function commence
