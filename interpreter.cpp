@@ -71,7 +71,7 @@ static int gettok() {
         return tok_eof;
     }
 
-    /*ASCIII Character*/
+    /*ASCII Character*/
     int ThisChar = LastChar;
     LastChar = getchar();
     return ThisChar;
