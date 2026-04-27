@@ -5,7 +5,7 @@ Do fibonacci(n) {
     Madame b = 1
     Madame count = 0
 
-    Whilst (count of lesser magnitude than n) persists {
+    Whilst (count < n) persists {
         Inscribe(a)
 
         Madame next = a + b
