@@ -269,9 +269,12 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr() {
                 auto arg = ParseExpression();
                 if(!arg) return nullptr;
                 Args.push_back(std::move(arg));
+                if (CurTok == ')') break;
+                if(CurTok == ',') return LogError("Expected ')'");
                 getNextToken();
             }
 
+            getNextToken();
             return std::make_unique<CallExprAST>(IdName, std::move(Args));
         }
     } 
