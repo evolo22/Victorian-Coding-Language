@@ -231,28 +231,6 @@ static std::unique_ptr<ExprAST> ParseParenExpr() {
 }
 
 // ParseIdentifierExpr — parse a variable reference OR a function call.
-//
-// Called when: CurTok == tok_identifier
-// It should:
-//   1. Save IdentifierStr, advance the token
-//   2. If the next token is NOT '(', return a VariableExprAST
-//   3. If the next token IS '(':
-//        a. Consume the '('
-//        b. Parse comma-separated expressions until ')'
-//        c. Consume the ')'
-//        d. Return a CallExprAST with the collected arguments
-//
-// Input:  a
-// Output: Variable(a)
-//
-// Input:  fibonacci(limit)
-// Output: Call(fibonacci)
-//           Variable(limit)
-//
-// Input:  add(1, 2)
-// Output: Call(add)
-//           Number(1.000000)
-//           Number(2.000000)
 static std::unique_ptr<ExprAST> ParseIdentifierExpr() {
 
     if(CurTok == tok_identifier){
@@ -270,7 +248,7 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr() {
                 if(!arg) return nullptr;
                 Args.push_back(std::move(arg));
                 if (CurTok == ')') break;
-                if(CurTok == ',') return LogError("Expected ')'");
+                if(CurTok != ',') return LogError("Expected ')'");
                 getNextToken();
             }
 
@@ -282,21 +260,12 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr() {
 }
 
 // ParsePrimary — the entry point for any single value or expression atom.
-//
-// Called when: we need the left-hand side of something, or a standalone value
-// It should:   look at CurTok and dispatch to the right parse function:
-//                tok_identifier -> ParseIdentifierExpr()
-//                tok_number     -> ParseNumberExpr()
-//                '('            -> ParseParenExpr()
-//                anything else  -> LogError("unknown token")
-//
-// This one is short — it's just a switch on CurTok.
 static std::unique_ptr<ExprAST> ParsePrimary() {
     
     if(CurTok == tok_identifier) return ParseIdentifierExpr();
     if(CurTok == tok_number) return ParseNumberExpr();
     if(CurTok == '(') return ParseParenExpr();
-    return LogError("ParsePrimary not implemented yet");
+    return LogError("unknown token");
 }
 
 // Operator precedence table.
@@ -315,42 +284,18 @@ static int GetTokPrecedence() {
 }
 
 // ParseBinOpRHS — parse the right-hand side of a binary expression.
-//
-// Called by: ParseExpression, with the LHS already parsed
-// Parameters:
-//   ExprPrec — the minimum precedence level this call is allowed to consume
-//   LHS      — the expression we have so far on the left
-//
-// It should loop as long as the current operator has precedence >= ExprPrec:
-//   1. Save the operator, advance the token
-//   2. Parse the next primary as RHS
-//   3. If the *next* operator has higher precedence than the current one,
-//      recursively call ParseBinOpRHS with ExprPrec+1 to grab it first
-//      (this is what makes * bind tighter than +)
-//   4. Combine LHS and RHS into a BinaryExprAST, repeat
-//
-// Input:  1 + 2
-// Output: Binary(+)
-//           Number(1.000000)
-//           Number(2.000000)
-//
-// Input:  a + b * c          <-- * should bind tighter
-// Output: Binary(+)
-//           Variable(a)
-//           Binary(*)
-//             Variable(b)
-//             Variable(c)
 static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec, std::unique_ptr<ExprAST> LHS) {
     
     while(GetTokPrecedence() >= ExprPrec){
+        int TokPrec = GetTokPrecedence();
         int BinOp = CurTok;
         getNextToken();
         auto RHS = ParsePrimary();
         if(!RHS) return nullptr;
 
         int NextPrec = GetTokPrecedence();
-        if(NextPrec > ExprPrec){
-            RHS = ParseBinOpRHS(ExprPrec + 1, std::move(RHS));
+        if(NextPrec > TokPrec){
+            RHS = ParseBinOpRHS(TokPrec + 1, std::move(RHS));
             if(!RHS) return nullptr;
         }
 
@@ -361,34 +306,12 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec, std::unique_ptr<Expr
 }
 
 // ParseExpression — the main expression entry point.
-//
-// It should:
-//   1. Call ParsePrimary() to get the left-hand side
-//   2. Pass it to ParseBinOpRHS(0, ...) to pick up any binary operators
-//
-// You do not need to handle operator precedence here — ParseBinOpRHS does that.
-// This function should be very short (2-3 lines).
 static std::unique_ptr<ExprAST> ParseExpression() {
     
     return ParseBinOpRHS(0, ParsePrimary());
 }
 
 // ParsePrototype — parse a function signature.
-//
-// Called when: CurTok == tok_identifier (the function name), after seeing `Do`
-// It should:
-//   1. Save the function name, expect and consume '('
-//   2. Read comma-separated identifier names until ')'
-//   3. Consume ')' and return a PrototypeAST
-//
-// Input:  fibonacci(n)
-// Output: Prototype(fibonacci(n))
-//
-// Input:  add(a, b)
-// Output: Prototype(add(a, b))
-//
-// Input:  commence()
-// Output: Prototype(commence())
 static std::unique_ptr<PrototypeAST> ParsePrototype() {
     
     if(CurTok == tok_identifier){
@@ -406,7 +329,7 @@ static std::unique_ptr<PrototypeAST> ParsePrototype() {
 
         return std::make_unique<PrototypeAST>(func_name, args);
     }
-    return LogErrorP("Identifier Expected ParsePrototype");
+    return LogErrorP("expected function name");
 }
 
 // ParseDefinition — parse a full `Do functionName(args) { body }` definition.
@@ -434,8 +357,35 @@ static void resetParser(const std::string &src) {
     CurTok = 0;
 }
 
+//===----------------------------------------------------------------------===//
+// Top-Level parsing
+//===----------------------------------------------------------------------===//
+
+static void HandleDefinition() {
+    if (auto FnAST = ParseDefinition())
+        std::cout << FnAST->toString() << "\n";
+    else
+        getNextToken();
+}
+
+static void HandleTopLevelExpression() {
+    if (auto E = ParseExpression())
+        std::cout << E->toString() << "\n";
+    else
+        getNextToken();
+}
 
 int main() {
+    std::string line;
+    while (std::getline(std::cin, line))
+        g_inputBuf += line + "\n";
+
+    getNextToken();
+    while (true) {
+        if (CurTok == tok_eof) break;
+        if (CurTok == tok_do) HandleDefinition();
+        else HandleTopLevelExpression();
+    }
 
     return 0;
 }
